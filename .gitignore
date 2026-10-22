@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-ui/
+data/
+*.js
+*.d.ts
+*.map
+!vitest.config.ts
+!vite.config.ts
+.env
+*.log
+*.bak.*
