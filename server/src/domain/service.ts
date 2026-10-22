@@ -195,7 +195,7 @@ export class EchoDeckService {
     let total = session.total;
     let position = session.position;
 
-    if (total === 0) {
+    if (total === 0 || position >= total) {
       // New session
       total = dueCards.length;
       position = 1;

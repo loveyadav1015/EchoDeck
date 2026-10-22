@@ -4,12 +4,11 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { logger } from "../logger.js";
 
-const DIST_UI_PATH = path.resolve(
-  new URL(".", import.meta.url).pathname,
-  "../../dist-ui/card.html",
+const DIST_UI_PATH = fileURLToPath(
+  new URL("../../dist-ui/card.html", import.meta.url),
 );
 
 const FALLBACK_HTML = `<!DOCTYPE html>

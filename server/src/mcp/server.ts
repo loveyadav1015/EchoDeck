@@ -7,6 +7,11 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  registerAppTool,
+  registerAppResource,
+  RESOURCE_MIME_TYPE,
+} from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
 import type { EchoDeckService } from "../domain/service.js";
 import type { Rating } from "../domain/types.js";
@@ -23,17 +28,12 @@ function toolResult(
   structuredContent: Record<string, unknown>,
   options?: { includeUi?: boolean },
 ): CallToolResult {
-  // TODO(VERIFY): confirm that `structuredContent` and `_meta` are valid top-level keys
-  // in the tool result object returned by a tool handler. Check the MCP spec (2025-11-25)
-  // or node_modules/@modelcontextprotocol/sdk/dist/types.d.ts for CallToolResult shape.
   const result: CallToolResult = {
     content: [{ type: "text" as const, text }],
     structuredContent,
   };
 
   if (options?.includeUi) {
-    // TODO(VERIFY): confirm that _meta.ui.resourceUri is the correct path for linking
-    // a tool result to an MCP App UI resource. Check the ext-apps docs or SDK types.
     result._meta = {
       ui: {
         resourceUri: UI_RESOURCE_URI,
@@ -54,23 +54,23 @@ export function createMcpServer(service: EchoDeckService): McpServer {
 
   const uiHtml = loadUiHtml();
 
-  // TODO(VERIFY): resource registration API — confirm the signature is
-  // server.resource(name, uri, handler) or server.resource(name, uri, metadata, handler).
-  // Check node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts
-  server.resource("card-ui", UI_RESOURCE_URI, async () => {
-    return {
-      contents: [
-        {
-          uri: UI_RESOURCE_URI,
-          // TODO(VERIFY): MIME type for ext-apps HTML. Check if @modelcontextprotocol/ext-apps
-          // exports a constant like MCP_APP_MIME_TYPE, or if it should be "text/html" or
-          // "application/vnd.mcp.app+html". Check ext-apps package exports.
-          mimeType: "text/html",
-          text: uiHtml,
-        },
-      ],
-    };
-  });
+  registerAppResource(
+    server,
+    "card-ui",
+    UI_RESOURCE_URI,
+    {},
+    async () => {
+      return {
+        contents: [
+          {
+            uri: UI_RESOURCE_URI,
+            mimeType: RESOURCE_MIME_TYPE,
+            text: uiHtml,
+          },
+        ],
+      };
+    },
+  );
 
   // ── Tool: create_deck ────────────────────────────────────
   // Using registerTool (non-deprecated API with config object)
@@ -103,15 +103,21 @@ export function createMcpServer(service: EchoDeckService): McpServer {
 
   // ── Tool: next_card (has UI) ─────────────────────────────
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "next_card",
     {
       description: "Call when the learner asks to be quizzed or wants the next card. Returns one due card. Read ONLY the front aloud. Do not reveal the back until the learner has answered.",
-      inputSchema: {
+      inputSchema: z.object({
         deckName: z.string().optional().describe("Optional deck name to quiz from"),
+      }),
+      _meta: {
+        ui: {
+          resourceUri: UI_RESOURCE_URI,
+        },
       },
     },
-    async ({ deckName }) => {
+    async ({ deckName }: { deckName?: string }) => {
       const now = Date.now();
       const result = service.nextCard(deckName, now);
 
@@ -146,16 +152,28 @@ export function createMcpServer(service: EchoDeckService): McpServer {
 
   // ── Tool: grade_answer (has UI) ──────────────────────────
 
-  server.registerTool(
+  registerAppTool(
+    server,
     "grade_answer",
     {
       description: "Call after the learner answers a card. Compare the spoken answer with the back of the card and choose a rating: again (wrong), hard (barely right), good (right), easy (instant and confident).",
-      inputSchema: {
+      inputSchema: z.object({
         cardId: z.string().describe("ID of the card being graded"),
         rating: z.enum(["again", "hard", "good", "easy"]).describe("How well the learner answered"),
+      }),
+      _meta: {
+        ui: {
+          resourceUri: UI_RESOURCE_URI,
+        },
       },
     },
-    async ({ cardId, rating }) => {
+    async ({
+      cardId,
+      rating,
+    }: {
+      cardId: string;
+      rating: "again" | "hard" | "good" | "easy";
+    }) => {
       const now = Date.now();
       const result = service.gradeAnswer(cardId, rating as Rating, now);
 

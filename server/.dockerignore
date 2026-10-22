@@ -5,8 +5,7 @@ data
 test
 test-*
 *.test.ts
-vitest.config.ts
-vite.config.ts
+
 .env
 .env.*
 *.md
