@@ -124,14 +124,13 @@ describe("next_card", () => {
   });
 
   it("returns done when no cards are due", () => {
-    const now = 0; // All seed cards are due at 0, but we set now to -1 to have none due
-    const farFuture = Date.now() + 100 * 86_400_000;
+    const now = Date.now();
     // Grade all cards so they are scheduled in the future
     const allCards = store.getCards();
     for (const card of allCards) {
-      service.gradeAnswer(card.id, "easy", Date.now());
+      service.gradeAnswer(card.id, "easy", now);
     }
-    const result = service.nextCard(undefined, farFuture);
+    const result = service.nextCard(undefined, now);
     expect(result.done).toBe(true);
     expect(result.dueCount).toBe(0);
     expect(result.message).toContain("caught up");
@@ -165,12 +164,43 @@ describe("next_card", () => {
     for (const card of allCards) {
       service.gradeAnswer(card.id, "easy", now);
     }
-    const farFuture = now + 100 * 86_400_000;
-    service.nextCard(undefined, farFuture);
+    service.nextCard(undefined, now);
     const session = store.getSession();
     expect(session.position).toBe(0);
     expect(session.total).toBe(0);
     expect(session.currentCardId).toBeNull();
+  });
+
+  it("never lets position exceed total (regression: Card 2 of 1)", () => {
+    const now = Date.now();
+    service.createDeck("Single Card Deck", [{ front: "Q1", back: "A1" }], now);
+
+    const first = service.nextCard("Single Card Deck", now);
+    expect(first.position).toBe(1);
+    expect(first.total).toBe(1);
+
+    const second = service.nextCard("Single Card Deck", now);
+    expect(second.position).toBe(1);
+    expect(second.total).toBe(1);
+    expect(second.position).toBeLessThanOrEqual(second.total!);
+  });
+
+  it("restarts session when position reaches total and cards are still due", () => {
+    const now = Date.now();
+    const first = service.nextCard("Networking Basics", now);
+    expect(first.position).toBe(1);
+    service.gradeAnswer(first.cardId!, "again", now);
+
+    const total = first.total!;
+    for (let p = 2; p <= total; p++) {
+      const card = service.nextCard("Networking Basics", now);
+      expect(card.position).toBe(p);
+      expect(card.position).toBeLessThanOrEqual(card.total!);
+    }
+
+    const nextSession = service.nextCard("Networking Basics", now);
+    expect(nextSession.position).toBe(1);
+    expect(nextSession.position).toBeLessThanOrEqual(nextSession.total!);
   });
 });
 
