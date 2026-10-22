@@ -5,13 +5,12 @@
  * Tool handlers are thin: validate → call service → shape the response.
  */
 
-// TODO(VERIFY): import path for McpServer — check node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { EchoDeckService } from "../domain/service.js";
 import type { Rating } from "../domain/types.js";
 import { loadUiHtml } from "./ui-resource.js";
-import { logger } from "../logger.js";
 
 const UI_RESOURCE_URI = "ui://echodeck/card.html";
 
@@ -23,11 +22,11 @@ function toolResult(
   text: string,
   structuredContent: Record<string, unknown>,
   options?: { includeUi?: boolean },
-) {
+): CallToolResult {
   // TODO(VERIFY): confirm that `structuredContent` and `_meta` are valid top-level keys
   // in the tool result object returned by a tool handler. Check the MCP spec (2025-11-25)
   // or node_modules/@modelcontextprotocol/sdk/dist/types.d.ts for CallToolResult shape.
-  const result: Record<string, unknown> = {
+  const result: CallToolResult = {
     content: [{ type: "text" as const, text }],
     structuredContent,
   };
@@ -46,8 +45,6 @@ function toolResult(
 }
 
 export function createMcpServer(service: EchoDeckService): McpServer {
-  // TODO(VERIFY): McpServer constructor options shape. Check the constructor signature
-  // in node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts
   const server = new McpServer({
     name: "echodeck",
     version: "1.0.0",
@@ -76,22 +73,21 @@ export function createMcpServer(service: EchoDeckService): McpServer {
   });
 
   // ── Tool: create_deck ────────────────────────────────────
+  // Using registerTool (non-deprecated API with config object)
 
-  // TODO(VERIFY): tool registration signature. Confirm it is:
-  // server.tool(name, description, inputSchemaShape, handler)
-  // where inputSchemaShape is Record<string, ZodType> (not z.object()).
-  // Check node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts
-  server.tool(
+  server.registerTool(
     "create_deck",
-    "Call when the learner wants to create a study deck or add notes. Provide a deck name and a list of question and answer cards derived from what the learner said.",
     {
-      deckName: z.string().min(1).describe("Name of the deck to create or add to"),
-      cards: z.array(
-        z.object({
-          front: z.string().describe("The question or front of the card"),
-          back: z.string().describe("The answer or back of the card"),
-        }),
-      ).min(1).describe("List of cards with front (question) and back (answer)"),
+      description: "Call when the learner wants to create a study deck or add notes. Provide a deck name and a list of question and answer cards derived from what the learner said.",
+      inputSchema: {
+        deckName: z.string().min(1).describe("Name of the deck to create or add to"),
+        cards: z.array(
+          z.object({
+            front: z.string().describe("The question or front of the card"),
+            back: z.string().describe("The answer or back of the card"),
+          }),
+        ).min(1).describe("List of cards with front (question) and back (answer)"),
+      },
     },
     async ({ deckName, cards }) => {
       const now = Date.now();
@@ -101,17 +97,19 @@ export function createMcpServer(service: EchoDeckService): McpServer {
         return toolResult(message, { error });
       }
 
-      return toolResult(message, result!);
+      return toolResult(message, { ...result! });
     },
   );
 
   // ── Tool: next_card (has UI) ─────────────────────────────
 
-  server.tool(
+  server.registerTool(
     "next_card",
-    "Call when the learner asks to be quizzed or wants the next card. Returns one due card. Read ONLY the front aloud. Do not reveal the back until the learner has answered.",
     {
-      deckName: z.string().optional().describe("Optional deck name to quiz from"),
+      description: "Call when the learner asks to be quizzed or wants the next card. Returns one due card. Read ONLY the front aloud. Do not reveal the back until the learner has answered.",
+      inputSchema: {
+        deckName: z.string().optional().describe("Optional deck name to quiz from"),
+      },
     },
     async ({ deckName }) => {
       const now = Date.now();
@@ -148,12 +146,14 @@ export function createMcpServer(service: EchoDeckService): McpServer {
 
   // ── Tool: grade_answer (has UI) ──────────────────────────
 
-  server.tool(
+  server.registerTool(
     "grade_answer",
-    "Call after the learner answers a card. Compare the spoken answer with the back of the card and choose a rating: again (wrong), hard (barely right), good (right), easy (instant and confident).",
     {
-      cardId: z.string().describe("ID of the card being graded"),
-      rating: z.enum(["again", "hard", "good", "easy"]).describe("How well the learner answered"),
+      description: "Call after the learner answers a card. Compare the spoken answer with the back of the card and choose a rating: again (wrong), hard (barely right), good (right), easy (instant and confident).",
+      inputSchema: {
+        cardId: z.string().describe("ID of the card being graded"),
+        rating: z.enum(["again", "hard", "good", "easy"]).describe("How well the learner answered"),
+      },
     },
     async ({ cardId, rating }) => {
       const now = Date.now();
@@ -184,11 +184,13 @@ export function createMcpServer(service: EchoDeckService): McpServer {
 
   // ── Tool: get_progress ───────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     "get_progress",
-    "Call when the learner asks how they are doing, about their streak, or what is due.",
     {
-      deckName: z.string().optional().describe("Optional deck to get progress for"),
+      description: "Call when the learner asks how they are doing, about their streak, or what is due.",
+      inputSchema: {
+        deckName: z.string().optional().describe("Optional deck to get progress for"),
+      },
     },
     async ({ deckName }) => {
       const now = Date.now();
@@ -197,7 +199,7 @@ export function createMcpServer(service: EchoDeckService): McpServer {
       const deckLabel = deckName ? ` in "${deckName}"` : "";
       const text = `You have a ${result.streak} day streak. ${result.dueToday} card${result.dueToday === 1 ? " is" : "s are"} due today${deckLabel}. ${result.mastered} of ${result.totalCards} card${result.totalCards === 1 ? " is" : "s are"} mastered.`;
 
-      return toolResult(text, result);
+      return toolResult(text, { ...result });
     },
   );
 

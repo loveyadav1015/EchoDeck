@@ -12,10 +12,6 @@ import type { StoreData, Card, Deck, Review, Session } from "../domain/types.js"
 // Use import with assert for JSON in ESM
 import seedData from "./seed.json" with { type: "json" };
 
-function defaultSession(): Session {
-  return { currentCardId: null, position: 0, total: 0 };
-}
-
 function defaultData(): StoreData {
   return structuredClone(seedData) as StoreData;
 }

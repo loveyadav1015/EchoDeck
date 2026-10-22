@@ -17,7 +17,6 @@ import { computeStreak } from "./streak.js";
 import {
   validateCards,
   validateDeckName,
-  deckNameMatch,
   type ValidationConfig,
 } from "./validation.js";
 import type { Store } from "../store/store.js";
