@@ -6,8 +6,7 @@
 import type { Request, Response } from "express";
 
 // TODO(VERIFY): import path for StreamableHTTPServerTransport. Check:
-// node_modules/@modelcontextprotocol/sdk/dist/server/streamableHttp.d.ts
-// The class name might also be StreamableHTTPTransport or HttpServerTransport.
+// node_modules/@modelcontextprotocol/sdk/dist/**/server/streamableHttp.d.ts
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 import { createMcpServer } from "./server.js";
@@ -26,21 +25,24 @@ export async function handleMcpPost(
   try {
     const server = createMcpServer(service);
 
-    // TODO(VERIFY): StreamableHTTPServerTransport constructor options.
-    // Confirm the option name for stateless mode. It may be `sessionIdGenerator` set to
-    // undefined or `stateless: true` or something else entirely.
-    // Check node_modules/@modelcontextprotocol/sdk/dist/server/streamableHttp.d.ts
+    // TODO(VERIFY): constructor option for stateless mode.
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
 
+    // Release the per-request server and transport once the response is done.
+    res.on("close", () => {
+      void transport.close();
+      void server.close();
+    });
+
     await server.connect(transport);
 
-    // TODO(VERIFY): confirm that transport.handleRequest(req, res) is the correct method
-    // to hand off the Express request/response to the transport. The method might be
-    // called handleRequest, handle, or processRequest.
-    // Check node_modules/@modelcontextprotocol/sdk/dist/server/streamableHttp.d.ts
-    await transport.handleRequest(req, res);
+    // express.json() has already consumed the request stream, so the parsed
+    // body must be passed in explicitly.
+    // TODO(VERIFY): confirm the third argument is the parsed body in the
+    // installed SDK (check handleRequest in streamableHttp.d.ts).
+    await transport.handleRequest(req, res, req.body);
   } catch (err) {
     logger.error("MCP POST handler error", {
       error: err instanceof Error ? err.message : String(err),
@@ -61,10 +63,10 @@ export async function handleMcpPost(
 /**
  * Handle GET /mcp and DELETE /mcp with a 405 for stateless mode.
  * TODO(VERIFY): confirm the appropriate error response for a stateless server
- * that does not support GET (SSE) or DELETE (session teardown). Check MCP spec
- * 2025-11-25 section on Streamable HTTP for required error codes.
+ * against the MCP Streamable HTTP specification.
  */
 export function handleMcpMethodNotAllowed(_req: Request, res: Response): void {
+  res.setHeader("Allow", "POST");
   res.status(405).json({
     jsonrpc: "2.0",
     error: {
