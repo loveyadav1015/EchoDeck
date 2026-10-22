@@ -1,0 +1,116 @@
+{
+  "decks": [
+    {
+      "name": "Networking Basics",
+      "createdAt": 0
+    }
+  ],
+  "cards": [
+    {
+      "id": "seed-01",
+      "deckName": "Networking Basics",
+      "front": "What transport protocol provides reliable, ordered delivery of data?",
+      "back": "TCP (Transmission Control Protocol) uses acknowledgements, sequencing, and retransmission to guarantee reliable, ordered delivery.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-02",
+      "deckName": "Networking Basics",
+      "front": "What transport protocol is connectionless and does not guarantee delivery?",
+      "back": "UDP (User Datagram Protocol) sends datagrams without establishing a connection, trading reliability for lower latency.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-03",
+      "deckName": "Networking Basics",
+      "front": "What does DNS stand for and what does it do?",
+      "back": "Domain Name System. It translates human-readable domain names like example.com into IP addresses that computers use to route traffic.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-04",
+      "deckName": "Networking Basics",
+      "front": "What does DHCP do on a network?",
+      "back": "Dynamic Host Configuration Protocol automatically assigns IP addresses, subnet masks, gateways, and DNS servers to devices joining a network.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-05",
+      "deckName": "Networking Basics",
+      "front": "What is an IP address?",
+      "back": "A numerical label (e.g. 192.168.1.1 for IPv4 or 2001:db8::1 for IPv6) assigned to each device on a network, used to identify and route packets.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-06",
+      "deckName": "Networking Basics",
+      "front": "What is a subnet mask used for?",
+      "back": "A subnet mask (e.g. 255.255.255.0) divides an IP address into a network portion and a host portion, defining which addresses are on the same local network.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-07",
+      "deckName": "Networking Basics",
+      "front": "What is the key difference between a router and a switch?",
+      "back": "A switch forwards frames within a single local network using MAC addresses. A router forwards packets between different networks using IP addresses.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-08",
+      "deckName": "Networking Basics",
+      "front": "What is the main difference between HTTP and HTTPS?",
+      "back": "HTTPS adds TLS/SSL encryption on top of HTTP, so data in transit is encrypted and the server's identity is verified by a certificate.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-09",
+      "deckName": "Networking Basics",
+      "front": "What are well-known port numbers for HTTP and HTTPS?",
+      "back": "HTTP uses port 80 by default. HTTPS uses port 443 by default. Ports below 1024 are considered well-known or system ports.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    },
+    {
+      "id": "seed-10",
+      "deckName": "Networking Basics",
+      "front": "What is network latency?",
+      "back": "Latency is the time it takes for a packet to travel from source to destination. It is commonly measured as round-trip time (RTT) in milliseconds.",
+      "box": 1,
+      "due": 0,
+      "lastReviewed": null,
+      "createdAt": 0
+    }
+  ],
+  "reviews": [],
+  "session": {
+    "currentCardId": null,
+    "position": 0,
+    "total": 0
+  }
+}
