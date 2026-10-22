@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EchoDeck</title>
+</head>
+<body>
+  <div id="app">
+    <div id="card-container" class="hidden">
+      <div id="progress-bar">
+        <span id="progress-label"></span>
+        <span id="streak-label"></span>
+      </div>
+      <div id="card">
+        <div id="front-section">
+          <div id="front-label" class="label">QUESTION</div>
+          <div id="front-text"></div>
+        </div>
+        <div id="back-section" class="hidden">
+          <div id="back-label" class="label">ANSWER</div>
+          <div id="back-text"></div>
+        </div>
+        <div id="rating-section" class="hidden">
+          <div id="rating-label"></div>
+          <div id="next-review"></div>
+          <div id="cards-left"></div>
+        </div>
+      </div>
+    </div>
+    <div id="done-container" class="hidden">
+      <div id="done-icon">✓</div>
+      <div id="done-message"></div>
+      <div id="done-streak"></div>
+    </div>
+    <div id="error-container" class="hidden">
+      <div id="error-icon">!</div>
+      <div id="error-message"></div>
+    </div>
+  </div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
