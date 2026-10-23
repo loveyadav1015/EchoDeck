@@ -99,7 +99,7 @@ Copy `.env.example` and adjust as needed. The server reads `process.env` directl
 
 ## Local Mode (Open-Source AI)
 
-EchoDeck includes a **second, fully local mode** built for Hacktoberfest's *"Open-Source AI, Slow and Steady"* challenge. In this mode, EchoDeck runs completely offline with zero hosted or paid APIs, using open-weight models to power flashcard generation and answer grading while reusing the exact same deterministic Leitner scheduling engine.
+EchoDeck includes a **second, fully local mode** . In this mode, EchoDeck runs completely offline with zero hosted or paid APIs, using open-weight models to power flashcard generation and answer grading while reusing the exact same deterministic Leitner scheduling engine.
 
 ### Prerequisites
 
