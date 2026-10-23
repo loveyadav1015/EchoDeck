@@ -6,6 +6,8 @@ EchoDeck lets learners create study decks, get quizzed, and track progress entir
 by voice through Alexa+. It uses Leitner-box spaced repetition to schedule reviews
 and provides a visual card UI for Echo Show devices.
 
+
+
 ## ES Module Choice
 
 This project uses **ES modules** throughout:
@@ -269,6 +271,14 @@ session. This means:
 - Only one user can study at a time.
 - If multiple people use the same server, they see each other's decks and progress.
 - This is acceptable for a personal demo or single-household setup.
+
+## RUN TEST
+
+<img width="1913" height="315" alt="image" src="https://github.com/user-attachments/assets/0aeba744-5ee4-4039-b891-1293f0c83984" />
+
+<img width="1281" height="796" alt="image" src="https://github.com/user-attachments/assets/d6ecf318-e47e-412f-a3a5-1330015e8148" />
+
+<img width="1920" height="515" alt="image" src="https://github.com/user-attachments/assets/3014fd1a-cbef-466b-86a1-b71259070958" />
 
 ## Troubleshooting
 
