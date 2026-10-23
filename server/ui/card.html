@@ -6,7 +6,22 @@
   <title>EchoDeck</title>
 </head>
 <body>
+  <header id="local-header" class="hidden">
+    <div class="logo-group">
+      <span class="logo">EchoDeck</span>
+      <span class="badge" id="mode-badge">Local Mode</span>
+    </div>
+    <nav class="nav-tabs">
+      <button id="tab-study" class="tab-btn active">Study</button>
+      <button id="tab-create" class="tab-btn">New Deck from Notes</button>
+    </nav>
+    <div id="header-stats">
+      <span id="header-streak">0 day streak</span>
+    </div>
+  </header>
+
   <div id="app">
+    <!-- Study Card Container -->
     <div id="card-container" class="hidden">
       <div id="progress-bar">
         <span id="progress-label"></span>
@@ -14,30 +29,92 @@
       </div>
       <div id="card">
         <div id="front-section">
-          <div id="front-label" class="label">QUESTION</div>
+          <div class="header-row">
+            <div id="front-label" class="label">QUESTION</div>
+            <button id="speak-question-btn" class="icon-btn hidden" title="Listen to question">🔊 Speak</button>
+          </div>
           <div id="front-text"></div>
         </div>
+
+        <!-- Local Mode Answer Input Form -->
+        <div id="local-input-section" class="hidden">
+          <div class="label">YOUR ANSWER</div>
+          <div class="input-row">
+            <input type="text" id="answer-input" placeholder="Type answer or click mic..." autocomplete="off" />
+            <button id="mic-btn" class="icon-btn" title="Speak answer">🎙️</button>
+            <button id="submit-answer-btn" class="primary-btn">Submit</button>
+          </div>
+          <div id="judge-loading" class="status-indicator hidden">Judging your answer with local model...</div>
+        </div>
+
         <div id="back-section" class="hidden">
           <div id="back-label" class="label">ANSWER</div>
           <div id="back-text"></div>
         </div>
+
         <div id="rating-section" class="hidden">
           <div id="rating-label"></div>
+          <div id="rating-reasoning" class="reasoning-text"></div>
           <div id="next-review"></div>
           <div id="cards-left"></div>
+
+          <!-- Fallback self-rating buttons if model output is malformed or model unavailable -->
+          <div id="fallback-rating-buttons" class="hidden">
+            <div class="fallback-prompt">AI evaluation unavailable. Please self-rate:</div>
+            <div class="rating-btn-group">
+              <button class="rate-btn again" data-rating="again">Again (Wrong)</button>
+              <button class="rate-btn hard" data-rating="hard">Hard (Struggled)</button>
+              <button class="rate-btn good" data-rating="good">Good (Correct)</button>
+              <button class="rate-btn easy" data-rating="easy">Easy (Instant)</button>
+            </div>
+          </div>
+
+          <div id="next-card-actions" class="hidden">
+            <button id="next-card-btn" class="primary-btn">Next Card ➔</button>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Done Container -->
     <div id="done-container" class="hidden">
       <div id="done-icon">✓</div>
       <div id="done-message"></div>
       <div id="done-streak"></div>
+      <div id="done-actions" class="hidden">
+        <button id="restart-study-btn" class="primary-btn">Check Due Cards</button>
+      </div>
     </div>
+
+    <!-- Error Container -->
     <div id="error-container" class="hidden">
       <div id="error-icon">!</div>
       <div id="error-message"></div>
     </div>
+
+    <!-- Local Mode: Generator View -->
+    <div id="generator-container" class="hidden">
+      <h2>Generate Flashcards with Local AI</h2>
+      <p class="subtitle">Paste notes or text. The local open-weight model will extract high-yield question-answer pairs and add them to your Leitner deck.</p>
+      
+      <div class="form-group">
+        <label for="deck-name-input">Deck Name</label>
+        <input type="text" id="deck-name-input" placeholder="e.g. Networking Basics" />
+      </div>
+
+      <div class="form-group">
+        <label for="notes-input">Notes Text</label>
+        <textarea id="notes-input" rows="8" placeholder="Paste your study notes here..."></textarea>
+      </div>
+
+      <button id="generate-btn" class="primary-btn">Generate Flashcards</button>
+      <div id="generate-status" class="status-indicator hidden"></div>
+      <div id="generator-actions" class="hidden">
+        <button id="start-after-generate-btn" class="primary-btn">Start Studying ➔</button>
+      </div>
+    </div>
   </div>
+
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

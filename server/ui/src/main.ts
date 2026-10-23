@@ -1,10 +1,13 @@
 /**
  * EchoDeck UI client logic.
- * Uses the ext-apps client SDK to receive tool results from the MCP server.
  *
- * All ext-apps SDK usage is isolated in this file.
+ * Supports two modes:
+ * 1. Ext-apps mode: Used when running inside Alexa+ / Echo Show via MCP client.
+ * 2. Local browser mode: Standalone interactive UI for offline open-model study,
+ *    voice/text answering, and local LLM flashcard generation.
+ *
  * Uses textContent (never innerHTML) to prevent XSS.
- * Missing fields never render as "undefined".
+ * Answer-leak rule: card back is NEVER rendered before answer submission.
  */
 
 import "./styles.css";
@@ -30,7 +33,12 @@ function hide(id: string): void {
   $(id).classList.add("hidden");
 }
 
-// ── State rendering ─────────────────────────────────────
+function safe(val: unknown): string {
+  if (val == null) return "";
+  return String(val);
+}
+
+// ── Types ────────────────────────────────────────────────
 
 interface ToolData {
   done?: boolean;
@@ -45,23 +53,26 @@ interface ToolData {
   message?: string;
   error?: string;
   rating?: string;
+  reasoning?: string;
   newBox?: number;
   nextReview?: string;
   cardsLeft?: number;
+  fallback?: boolean;
 }
 
-function safe(val: unknown): string {
-  if (val == null) return "";
-  return String(val);
-}
+// ── Shared State Rendering ──────────────────────────────
 
-/**
- * State A: next_card returned a card — show front only.
- */
+let currentCardId: string | null = null;
+let currentFrontText: string = "";
+
 function renderFrontOnly(data: ToolData): void {
   hide("done-container");
   hide("error-container");
+  hide("generator-container");
   show("card-container");
+
+  currentCardId = data.cardId ?? null;
+  currentFrontText = data.front ?? "";
 
   // Progress
   const pos = data.position ?? 0;
@@ -69,78 +80,80 @@ function renderFrontOnly(data: ToolData): void {
   setText("progress-label", total > 0 ? `Card ${pos} of ${total}` : "");
   const streak = data.streak ?? 0;
   setText("streak-label", streak > 0 ? `${streak} day streak` : "");
+  const headerStreak = document.getElementById("header-streak");
+  if (headerStreak) headerStreak.textContent = `${streak} day streak`;
 
   // Front
   show("front-section");
   setText("front-text", safe(data.front));
 
-  // Hide back and rating
+  // Answer-leak rule: Hide back and rating
   hide("back-section");
   hide("rating-section");
 }
 
-/**
- * State B: grade_answer — show front, back, rating, and next review.
- */
 function renderGraded(data: ToolData): void {
   hide("done-container");
   hide("error-container");
+  hide("generator-container");
   show("card-container");
 
-  // Progress — keep whatever is showing or hide
-  setText("progress-label", "");
-  const streak = data.streak ?? 0;
-  setText("streak-label", streak > 0 ? `${streak} day streak` : "");
-
-  // Front
+  // Keep front visible
   show("front-section");
-  setText("front-text", safe(data.front));
+  if (data.front) {
+    setText("front-text", safe(data.front));
+  }
 
-  // Back
+  // Reveal back only after answer has been processed
   show("back-section");
   setText("back-text", safe(data.back));
 
   // Rating info
   show("rating-section");
-  const ratingLabel = $(  "rating-label");
+  const ratingLabel = $("rating-label");
   const ratingText = safe(data.rating).toUpperCase();
   ratingLabel.textContent = ratingText ? `Rated: ${ratingText}` : "";
-  // Set color class
   ratingLabel.className = "";
   if (data.rating) {
     ratingLabel.classList.add(data.rating);
   }
 
+  const reasoningEl = document.getElementById("rating-reasoning");
+  if (reasoningEl) {
+    reasoningEl.textContent = data.reasoning ? `"${data.reasoning}"` : "";
+  }
+
   setText("next-review", data.nextReview ? `Next review: ${data.nextReview}` : "");
   const left = data.cardsLeft ?? 0;
   setText("cards-left", `${left} card${left === 1 ? "" : "s"} left`);
+
+  const streak = data.streak ?? 0;
+  setText("streak-label", streak > 0 ? `${streak} day streak` : "");
+  const headerStreak = document.getElementById("header-streak");
+  if (headerStreak) headerStreak.textContent = `${streak} day streak`;
 }
 
-/**
- * State C: done — all caught up.
- */
 function renderDone(data: ToolData): void {
   hide("card-container");
   hide("error-container");
+  hide("generator-container");
   show("done-container");
 
   setText("done-message", safe(data.message) || "All caught up!");
   const streak = data.streak ?? 0;
   setText("done-streak", streak > 0 ? `${streak} day streak` : "");
+  const headerStreak = document.getElementById("header-streak");
+  if (headerStreak) headerStreak.textContent = `${streak} day streak`;
 }
 
-/**
- * State D: error.
- */
 function renderError(message: string): void {
   hide("card-container");
   hide("done-container");
+  hide("generator-container");
   show("error-container");
 
   setText("error-message", message || "Something went wrong.");
 }
-
-// ── Determine which state to render from tool result ─────
 
 function renderToolResult(toolName: string, data: ToolData): void {
   if (data.error && toolName !== "grade_answer") {
@@ -166,72 +179,324 @@ function renderToolResult(toolName: string, data: ToolData): void {
     return;
   }
 
-  // Unknown tool — just show message if any
   if (data.message) {
     renderDone(data);
   }
 }
 
-// ── Ext-apps client connection ──────────────────────────
+// ── Local Mode Web App Controller ────────────────────────
 
-// TODO(VERIFY): the correct import path and class name for the ext-apps client.
-// Check node_modules/@modelcontextprotocol/ext-apps for the actual export.
-// It might be: import { McpClientApp } from "@modelcontextprotocol/ext-apps/client"
-// or: import { ExtAppClient } from "@modelcontextprotocol/ext-apps"
-// or something else entirely.
+async function initLocalApp(): Promise<void> {
+  // Show header and local study controls
+  show("local-header");
+  show("speak-question-btn");
+  show("local-input-section");
+  show("done-actions");
 
-// TODO(VERIFY): the constructor, connect method, and tool-result callback registration.
-// The API might look like:
-//   const app = new McpClientApp();
-//   app.onToolResult((toolName, result) => { ... });
-//   await app.connect();
-// or it might use addEventListener, or a different pattern.
+  // Tab switching
+  const tabStudy = $("tab-study");
+  const tabCreate = $("tab-create");
 
-// For now, use a safe pattern that tries to load the client and falls back gracefully.
-async function initExtAppsClient(): Promise<void> {
-  try {
-    // Dynamic import so build does not fail if the package is missing during dev
-    // TODO(VERIFY): replace this with the correct static import once the ext-apps
-    // API is confirmed. The import path below is a best guess.
-    const extApps = await import("@modelcontextprotocol/ext-apps");
+  tabStudy.addEventListener("click", () => {
+    tabStudy.classList.add("active");
+    tabCreate.classList.remove("active");
+    hide("generator-container");
+    loadNextCard();
+  });
 
-    // TODO(VERIFY): the class name — could be McpClientApp, ExtAppClient, or Client
-    const ClientClass = extApps.McpClientApp ?? extApps.ExtAppClient ?? extApps.default;
+  tabCreate.addEventListener("click", () => {
+    tabCreate.classList.add("active");
+    tabStudy.classList.remove("active");
+    hide("card-container");
+    hide("done-container");
+    hide("error-container");
+    show("generator-container");
+  });
 
-    if (!ClientClass) {
-      console.warn("ext-apps client class not found in module exports");
+  const restartStudyBtn = document.getElementById("restart-study-btn");
+  if (restartStudyBtn) {
+    restartStudyBtn.addEventListener("click", () => loadNextCard());
+  }
+
+  const startAfterGenBtn = document.getElementById("start-after-generate-btn");
+  if (startAfterGenBtn) {
+    startAfterGenBtn.addEventListener("click", () => {
+      tabStudy.click();
+    });
+  }
+
+  // Speak question (TTS)
+  const speakBtn = $("speak-question-btn");
+  speakBtn.addEventListener("click", () => speakText(currentFrontText));
+
+  // Voice recognition (STT)
+  setupSpeechRecognition();
+
+  // Submit Answer
+  const submitBtn = $("submit-answer-btn");
+  const answerInput = $("answer-input") as HTMLInputElement;
+
+  const handleSubmit = async () => {
+    const answer = answerInput.value.trim();
+    if (!currentCardId) return;
+
+    show("judge-loading");
+    hide("fallback-rating-buttons");
+    hide("next-card-actions");
+
+    try {
+      const res = await fetch("/api/study/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId: currentCardId, answer }),
+      });
+
+      const data = (await res.json()) as ToolData;
+      hide("judge-loading");
+
+      if (data.fallback) {
+        // Fallback to self-rating
+        show("back-section");
+        setText("back-text", safe(data.back));
+        show("rating-section");
+        setText("rating-label", "AI Evaluation Failed");
+        const reasonEl = document.getElementById("rating-reasoning");
+        if (reasonEl) reasonEl.textContent = data.reasoning || "Please self-rate your answer.";
+        show("fallback-rating-buttons");
+      } else {
+        renderGraded(data);
+        show("next-card-actions");
+      }
+    } catch {
+      hide("judge-loading");
+      show("fallback-rating-buttons");
+    }
+  };
+
+  submitBtn.addEventListener("click", handleSubmit);
+  answerInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      handleSubmit();
+    }
+  });
+
+  // Next card button
+  const nextCardBtn = document.getElementById("next-card-btn");
+  if (nextCardBtn) {
+    nextCardBtn.addEventListener("click", () => {
+      answerInput.value = "";
+      loadNextCard();
+    });
+  }
+
+  // Fallback rating buttons
+  document.querySelectorAll(".rate-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const rating = (e.currentTarget as HTMLElement).getAttribute("data-rating");
+      if (!currentCardId || !rating) return;
+
+      try {
+        const res = await fetch("/api/study/self-grade", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cardId: currentCardId, rating }),
+        });
+        const data = (await res.json()) as ToolData;
+        hide("fallback-rating-buttons");
+        renderGraded(data);
+        show("next-card-actions");
+      } catch (err) {
+        alert("Failed to record rating: " + String(err));
+      }
+    });
+  });
+
+  // Deck Generator
+  const generateBtn = $("generate-btn");
+  generateBtn.addEventListener("click", async () => {
+    const deckNameInput = $("deck-name-input") as HTMLInputElement;
+    const notesInput = $("notes-input") as HTMLTextAreaElement;
+    const statusEl = $("generate-status");
+
+    const deckName = deckNameInput.value.trim();
+    const notes = notesInput.value.trim();
+
+    if (!deckName || !notes) {
+      statusEl.textContent = "Please enter both a deck name and notes.";
+      show("generate-status");
       return;
     }
 
+    statusEl.textContent = "Generating flashcards using local model... this may take a moment.";
+    show("generate-status");
+    generateBtn.setAttribute("disabled", "true");
+
+    try {
+      const res = await fetch("/api/generate-deck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deckName, notes }),
+      });
+      const data = await res.json();
+      generateBtn.removeAttribute("disabled");
+
+      if (data.error) {
+        statusEl.textContent = `Error: ${data.message || data.error}`;
+      } else {
+        statusEl.textContent = `Success! ${data.message}`;
+        show("generator-actions");
+      }
+    } catch (err) {
+      generateBtn.removeAttribute("disabled");
+      statusEl.textContent = "Failed to communicate with local server: " + String(err);
+    }
+  });
+
+  // Initial load
+  await loadNextCard();
+}
+
+async function loadNextCard(): Promise<void> {
+  const answerInput = document.getElementById("answer-input") as HTMLInputElement | null;
+  if (answerInput) answerInput.value = "";
+  hide("judge-loading");
+  hide("fallback-rating-buttons");
+  hide("next-card-actions");
+
+  try {
+    const res = await fetch("/api/study/next", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = (await res.json()) as ToolData;
+    if (data.done) {
+      renderDone(data);
+    } else {
+      renderFrontOnly(data);
+    }
+  } catch {
+    renderError("Could not reach local server. Is it running?");
+  }
+}
+
+async function speakText(text: string): Promise<void> {
+  if (!text) return;
+
+  // Try local Piper TTS endpoint first
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      await audio.play();
+      return;
+    }
+  } catch {
+    // Fall through to browser speech synthesis
+  }
+
+  // Graceful browser fallback
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function setupSpeechRecognition(): void {
+  const micBtn = document.getElementById("mic-btn");
+  const answerInput = document.getElementById("answer-input") as HTMLInputElement | null;
+  if (!micBtn || !answerInput) return;
+
+  // Check browser SpeechRecognition or webkitSpeechRecognition
+  const SpeechRec =
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+  if (SpeechRec) {
+    const recognition = new SpeechRec();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    let isListening = false;
+
+    recognition.onstart = () => {
+      isListening = true;
+      micBtn.classList.add("recording");
+    };
+
+    recognition.onend = () => {
+      isListening = false;
+      micBtn.classList.remove("recording");
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
+      if (transcript) {
+        answerInput.value = transcript;
+      }
+    };
+
+    micBtn.addEventListener("click", () => {
+      if (isListening) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    });
+  } else {
+    micBtn.title = "Microphone input not supported by this browser";
+    micBtn.style.opacity = "0.5";
+  }
+}
+
+// ── Ext-Apps Connection ──────────────────────────────────
+
+async function initExtAppsClient(): Promise<boolean> {
+  // If running in an iframe with MCP parent
+  if (window.self === window.top) {
+    return false;
+  }
+
+  try {
+    const extApps = await import("@modelcontextprotocol/ext-apps");
+    const ClientClass = extApps.McpClientApp ?? (extApps as any).ExtAppClient ?? extApps.default;
+    if (!ClientClass) return false;
+
     const client = new ClientClass();
 
-    // TODO(VERIFY): the method name for subscribing to tool results.
-    // Might be onToolResult, on("tool_result", ...), addEventListener, etc.
     if (typeof client.onToolResult === "function") {
       client.onToolResult((toolName: string, result: { structuredContent?: ToolData }) => {
         const data = result.structuredContent ?? {};
         renderToolResult(toolName, data as ToolData);
       });
-    } else if (typeof client.on === "function") {
-      client.on("tool_result", (event: { toolName: string; result: { structuredContent?: ToolData } }) => {
-        const data = event.result.structuredContent ?? {};
-        renderToolResult(event.toolName, data as ToolData);
-      });
     }
 
-    // TODO(VERIFY): the connect/start method name. Might be connect(), start(), init().
     if (typeof client.connect === "function") {
       await client.connect();
-    } else if (typeof client.start === "function") {
-      await client.start();
+      return true;
     }
-  } catch (err) {
-    console.warn("ext-apps client not available:", err);
-    // In development without the ext-apps client, show a placeholder
-    renderError("Waiting for Alexa to connect...");
+  } catch {
+    // Ext-apps not available
   }
+  return false;
 }
 
 // ── Bootstrap ────────────────────────────────────────────
 
-initExtAppsClient();
+async function bootstrap() {
+  const isExtApp = await initExtAppsClient();
+  if (!isExtApp) {
+    // Standalone browser mode
+    initLocalApp();
+  }
+}
+
+bootstrap();
