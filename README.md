@@ -76,25 +76,142 @@ If you skip this step, the server logs an error and serves a fallback page.
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `MODE` | `alexa` | Server mode: `alexa` (MCP only), `local` (offline open-source AI & UI), or `both` |
+| `HOST` | `127.0.0.1` (local) / `0.0.0.0` (alexa/both) | Network bind host |
 | `PORT` | `3000` | HTTP port |
 | `DATA_FILE` | `./data/echodeck.json` | Path to the JSON data file |
 | `TZ` | `UTC` | IANA timezone for streak calculation |
 | `DEMO_MODE` | `false` | Set to `true` to make one SRS interval unit = 1 minute |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
-| `MAX_CARDS_PER_CALL` | `50` | Max cards per `create_deck` call |
+| `MAX_CARDS_PER_CALL` | `50` | Max cards per call / generation chunk |
 | `MAX_TEXT_LENGTH` | `500` | Max characters per card side |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama HTTP API endpoint |
+| `OLLAMA_MODEL` | `llama3.2` | Open-weight model name (e.g. `llama3.2`, `qwen2.5-coder:3b`, `mistral`) |
+| `STT_URL` | *(none)* | Optional local whisper.cpp server endpoint (`/inference`) |
+| `TTS_URL` | *(none)* | Optional local Piper TTS HTTP server endpoint |
 
 Copy `.env.example` and adjust as needed. The server reads `process.env` directly
 (no dotenv dependency).
 
-## Smoke Test
+---
 
+## Local Mode (Open-Source AI)
+
+EchoDeck includes a **second, fully local mode** built for Hacktoberfest's *"Open-Source AI, Slow and Steady"* challenge. In this mode, EchoDeck runs completely offline with zero hosted or paid APIs, using open-weight models to power flashcard generation and answer grading while reusing the exact same deterministic Leitner scheduling engine.
+
+### Prerequisites
+
+1. **Ollama**:
+   - Install: [ollama.com/download](https://ollama.com/download) (or `curl -fsSL https://ollama.com/install.sh | sh` on Linux)
+   - Pull a small, laptop-friendly open model:
+     ```bash
+     ollama pull llama3.2          # 3B parameter model (recommended)
+     # or:
+     ollama pull qwen2.5-coder:3b
+     ollama pull mistral
+     ```
+   - Ensure Ollama is running (`ollama serve` or system service at `http://127.0.0.1:11434`).
+
+2. **(Optional) Local Speech-to-Text with whisper.cpp**:
+   - Run whisper.cpp's server:
+     ```bash
+     ./server -m models/ggml-base.en.bin --port 8080
+     ```
+   - Set `STT_URL=http://127.0.0.1:8080`.
+   - *Fallback:* If unset, EchoDeck uses browser Speech Recognition or typed input.
+
+3. **(Optional) Local Text-to-Speech with Piper**:
+   - Run Piper's HTTP server with an ONNX voice model:
+     ```bash
+     python3 -m piper.http_server --model en_US-lessac-medium.onnx --port 5000
+     ```
+   - Set `TTS_URL=http://127.0.0.1:5000`.
+   - *Fallback:* If unset, EchoDeck uses the browser's built-in Web Speech synthesis (`window.speechSynthesis`).
+
+### Running Local Mode
+
+```bash
+cd server
+npm run build     # Builds single-file UI and compiles TypeScript
+
+# Run in local mode
+MODE=local npm start
+```
+
+Open **`http://127.0.0.1:3000/`** in your browser to access the local study dashboard:
+- **New Deck from Notes**: Paste raw notes or book excerpts, and the local model extracts high-yield flashcard pairs into your deck.
+- **Voice or Typed Study**: Cards are read aloud, you speak or type your answer, and the local model evaluates accuracy and assigns an SRS rating (`again`, `hard`, `good`, `easy`).
+- **Answer-Leak Guarantee**: The card's back is never delivered over the network or displayed until your answer has been submitted and judged.
+- **Graceful Self-Rate Fallback**: If the local model returns unparseable JSON (after 1 retry) or is offline, EchoDeck asks you to self-rate rather than crashing or guessing a wrong rating.
+
+### Docker & Docker Compose Option
+
+To run EchoDeck connected to a local Ollama instance on the host:
+
+```yaml
+# docker-compose.yml
+services:
+  echodeck:
+    build: ./server
+    ports:
+      - "3000:3000"
+    environment:
+      - MODE=local
+      - HOST=0.0.0.0
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3.2
+      - DATA_FILE=/app/data/echodeck.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+```
+
+```bash
+docker compose up
+```
+
+---
+
+## Architecture: Dual-Mode Operation
+
+EchoDeck operates in three distinct modes controlled by `MODE`:
+
+| Feature | `MODE=alexa` (default) | `MODE=local` (open-source) | `MODE=both` |
+|---|---|---|---|
+| **Primary Interface** | Alexa+ Voice / Echo Show | Local Web UI (`/`) & REST | Both |
+| **Card Generation** | Alexa's AI | Local Ollama LLM | Both |
+| **Answer Judging** | Alexa's AI | Local Ollama LLM | Both |
+| **Spoken Input** | Alexa STT | whisper.cpp / Web Speech | Both |
+| **Spoken Output** | Alexa TTS | Piper / Web Speech | Both |
+| **MCP Tool Server** | Mounted on `/mcp` | Mounted on `/mcp` + `generate_deck_from_notes` | Both |
+| **Spaced Repetition** | Deterministic Leitner | Deterministic Leitner | Deterministic Leitner |
+| **Data Persistence** | Atomic JSON file | Same Atomic JSON file | Same Atomic JSON file |
+
+### Where AI Is and Is NOT Used
+
+- **AI IS used for**:
+  1. Extracting `{ front, back }` cards from unstructured notes.
+  2. Judging a learner's answer against the card back and returning an objective rating (`again`, `hard`, `good`, `easy`).
+- **AI is NEVER used for scheduling**:
+  - Leitner box intervals (1, 3, 7, 14 days), due date math, review history, and streaks are computed strictly with deterministic algorithms in `domain/srs.ts` and `domain/streak.ts`.
+  - An LLM hallucination cannot corrupt review intervals or streak counts.
+
+## Smoke Tests
+
+### Alexa+ MCP Smoke Test
 ```bash
 chmod +x scripts/smoke-test.sh
 ./scripts/smoke-test.sh http://localhost:3000
 ```
-
 Runs `curl` checks for `/health` and all four MCP tools.
+
+### Local Open-Model Smoke Test
+```bash
+chmod +x scripts/local-smoke-test.sh
+./scripts/local-smoke-test.sh 3456
+```
+Automatically detects if local Ollama is running at `http://127.0.0.1:11434`, tests card generation, verifies the answer-leak rule, tests answer judging against open-weight models, and cleanly skips if Ollama is absent.
 
 ## Run Tests
 
@@ -110,6 +227,9 @@ Tests cover:
 - **store.test.ts** — Persistence, atomic writes, corrupt file recovery
 - **service.test.ts** — All tool paths (empty deck, unknown deck, unknown card, etc.)
 - **latency.test.ts** — p95 latency for each service function
+- **local-llm.test.ts** — Mocked Ollama provider, card generation (valid, malformed, over-limit, empty, duplicate), answer judging (correct, wrong, malformed JSON, retry then fallback)
+- **local-stt-tts.test.ts** — Mocked whisper.cpp STT and Piper TTS adapters with graceful fallbacks
+- **local-api.test.ts** — REST API endpoints, mode selection, answer-leak prevention, and loopback privacy validation
 
 Type-check without emitting:
 ```bash
