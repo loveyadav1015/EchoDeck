@@ -3,7 +3,11 @@
  * No SDK imports.
  */
 
+export type Mode = "alexa" | "local" | "both";
+
 export interface Config {
+  readonly mode: Mode;
+  readonly host: string;
   readonly port: number;
   readonly dataFile: string;
   readonly tz: string;
@@ -11,10 +15,15 @@ export interface Config {
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly maxCardsPerCall: number;
   readonly maxTextLength: number;
+  readonly ollamaUrl: string;
+  readonly ollamaModel: string;
+  readonly sttUrl?: string;
+  readonly ttsUrl?: string;
 }
 
 const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 type LogLevel = (typeof VALID_LOG_LEVELS)[number];
+const VALID_MODES = ["alexa", "local", "both"] as const;
 
 function requirePositiveInt(name: string, raw: string | undefined, defaultValue: number): number {
   if (raw === undefined || raw === "") return defaultValue;
@@ -47,7 +56,20 @@ function validateTimezone(tz: string): string {
   }
 }
 
+function requireMode(raw: string | undefined, defaultValue: Mode): Mode {
+  if (raw === undefined || raw === "") return defaultValue;
+  const lower = raw.toLowerCase() as Mode;
+  if (!VALID_MODES.includes(lower)) {
+    throw new Error(
+      `Invalid MODE: "${raw}" — must be one of: ${VALID_MODES.join(", ")}.`,
+    );
+  }
+  return lower;
+}
+
 export function loadConfig(): Config {
+  const mode = requireMode(process.env.MODE, "alexa");
+  const host = process.env.HOST || (mode === "local" ? "127.0.0.1" : "0.0.0.0");
   const port = requirePositiveInt("PORT", process.env.PORT, 3000);
   const dataFile = process.env.DATA_FILE || "./data/echodeck.json";
   const tz = validateTimezone(process.env.TZ || "UTC");
@@ -55,8 +77,14 @@ export function loadConfig(): Config {
   const logLevel = requireLogLevel(process.env.LOG_LEVEL, "info");
   const maxCardsPerCall = requirePositiveInt("MAX_CARDS_PER_CALL", process.env.MAX_CARDS_PER_CALL, 50);
   const maxTextLength = requirePositiveInt("MAX_TEXT_LENGTH", process.env.MAX_TEXT_LENGTH, 500);
+  const ollamaUrl = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+  const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+  const sttUrl = process.env.STT_URL || process.env.WHISPER_URL;
+  const ttsUrl = process.env.TTS_URL || process.env.PIPER_URL;
 
   return {
+    mode,
+    host,
     port,
     dataFile,
     tz,
@@ -64,5 +92,9 @@ export function loadConfig(): Config {
     logLevel,
     maxCardsPerCall,
     maxTextLength,
+    ollamaUrl,
+    ollamaModel,
+    sttUrl,
+    ttsUrl,
   };
 }
