@@ -8,6 +8,12 @@ import { logger, setLogLevel } from "./logger.js";
 import { Store } from "./store/store.js";
 import { EchoDeckService } from "./domain/service.js";
 import { handleMcpPost, handleMcpMethodNotAllowed } from "./mcp/transport.js";
+import { loadUiHtml } from "./mcp/ui-resource.js";
+import { OllamaLlmProvider } from "./local/ollama-llm.js";
+import { WhisperSttProvider } from "./local/whisper-stt.js";
+import { PiperTtsProvider } from "./local/piper-tts.js";
+import { LocalController } from "./local/local-controller.js";
+import { createLocalApiRouter } from "./routes/local-api.js";
 
 const MAX_BODY_SIZE = "1mb";
 
@@ -50,9 +56,44 @@ async function main(): Promise<void> {
     res.json({ status: "ok" });
   });
 
-  // MCP endpoint
+  // ── Local Mode Setup ──────────────────────────────────
+  let localController: LocalController | undefined;
+  if (config.mode === "local" || config.mode === "both") {
+    const llm = new OllamaLlmProvider({
+      baseUrl: config.ollamaUrl,
+      model: config.ollamaModel,
+    });
+    const stt = new WhisperSttProvider({ baseUrl: config.sttUrl });
+    const tts = new PiperTtsProvider({ baseUrl: config.ttsUrl });
+
+    localController = new LocalController({
+      service,
+      store,
+      llm,
+      stt,
+      tts,
+      maxCardsPerCall: config.maxCardsPerCall,
+      maxTextLength: config.maxTextLength,
+    });
+
+    app.use("/api", createLocalApiRouter(localController));
+
+    // Serve interactive card UI for local browser use
+    const serveUi = (_req: express.Request, res: express.Response) => {
+      const html = loadUiHtml();
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    };
+
+    app.get("/", serveUi);
+    app.get("/app", serveUi);
+    app.get("/card.html", serveUi);
+  }
+
+  // ── MCP Endpoint ──────────────────────────────────────
+  const mcpOptions = localController ? { localController } : undefined;
   app.post("/mcp", (req, res) => {
-    handleMcpPost(req, res, service).catch((err) => {
+    handleMcpPost(req, res, service, mcpOptions).catch((err) => {
       logger.error("Unhandled MCP error", {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -71,8 +112,10 @@ async function main(): Promise<void> {
   app.delete("/mcp", handleMcpMethodNotAllowed);
 
   // ── Start ─────────────────────────────────────────────
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, config.host, () => {
     logger.info("EchoDeck server started", {
+      mode: config.mode,
+      host: config.host,
       port: config.port,
       dataFile: config.dataFile,
       demoMode: config.demoMode,

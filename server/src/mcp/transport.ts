@@ -9,7 +9,7 @@ import type { Request, Response } from "express";
 // node_modules/@modelcontextprotocol/sdk/dist/**/server/streamableHttp.d.ts
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
-import { createMcpServer } from "./server.js";
+import { createMcpServer, type McpServerOptions } from "./server.js";
 import type { EchoDeckService } from "../domain/service.js";
 import { logger } from "../logger.js";
 
@@ -21,9 +21,10 @@ export async function handleMcpPost(
   req: Request,
   res: Response,
   service: EchoDeckService,
+  options?: McpServerOptions,
 ): Promise<void> {
   try {
-    const server = createMcpServer(service);
+    const server = createMcpServer(service, options);
 
     // TODO(VERIFY): constructor option for stateless mode.
     const transport = new StreamableHTTPServerTransport({

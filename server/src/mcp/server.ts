@@ -44,7 +44,24 @@ function toolResult(
   return result;
 }
 
-export function createMcpServer(service: EchoDeckService): McpServer {
+export interface McpServerOptions {
+  localController?: {
+    generateDeck: (
+      deckName: string,
+      notes: string,
+      now: number,
+    ) => Promise<{
+      result: unknown;
+      error: string | null;
+      message: string;
+    }>;
+  };
+}
+
+export function createMcpServer(
+  service: EchoDeckService,
+  options?: McpServerOptions,
+): McpServer {
   const server = new McpServer({
     name: "echodeck",
     version: "1.0.0",
@@ -220,6 +237,30 @@ export function createMcpServer(service: EchoDeckService): McpServer {
       return toolResult(text, { ...result });
     },
   );
+
+  // ── Tool: generate_deck_from_notes (optional local AI) ───
+
+  if (options?.localController) {
+    const controller = options.localController;
+    server.registerTool(
+      "generate_deck_from_notes",
+      {
+        description: "Call when the learner provides notes or text and wants to automatically generate flashcards using local AI.",
+        inputSchema: {
+          deckName: z.string().min(1).describe("Name of the deck to create or add to"),
+          notes: z.string().min(1).describe("Notes or text content to generate flashcards from"),
+        },
+      },
+      async ({ deckName, notes }) => {
+        const now = Date.now();
+        const { result, error, message } = await controller.generateDeck(deckName, notes, now);
+        if (error) {
+          return toolResult(message, { error });
+        }
+        return toolResult(message, { ...(result as Record<string, unknown>) });
+      },
+    );
+  }
 
   return server;
 }
